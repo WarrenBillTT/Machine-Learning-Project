@@ -1,315 +1,364 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
-import joblib
 import os
+from datetime import datetime
+import joblib
+import matplotlib.pyplot as plt
+import pandas as pd
+import plotly.graph_objects as go
+import streamlit as st
 
-
-# KONFIGURASI HALAMAN & CSS 
-
+# === KONFIGURASI HALAMAN ===
 st.set_page_config(page_title="CampusCALM", layout="wide", initial_sidebar_state="collapsed")
 
-# Custom CSS dark mode
 st.markdown("""
     <style>
-    /* Background utama aplikasi pekat */
-    .stApp {
-        background-color: #000000; /* True Black iOS */
-        color: #FFFFFF;
-    }
-    
-    /* Mengubah jenis font global */
+    .stApp { background-color: #000000; color: #FFFFFF; }
     html, body, [class*="css"] {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
-    
-    /* Judul & Teks Utama */
-    h1, h2, h3, h4, h5, h6, p, span, label {
-        color: #FFFFFF !important;
-    }
-    
-    /* Info/Alert Box Glassmorphism style */
+    h1, h2, h3, h4, h5, h6, p, span, label { color: #FFFFFF !important; }
     .stAlert {
-        background-color: #1C1C1E !important; /* Dark gray cell */
+        background-color: #1C1C1E !important;
         border: 1px solid #2C2C2E !important;
         border-radius: 16px !important;
         box-shadow: 0 4px 20px rgba(0,0,0,0.2);
     }
-    
-    /* Styling Navigasi Tabs Mode Gelap */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: #1C1C1E;
-        padding: 6px;
-        border-radius: 14px;
-        border: 1px solid #2C2C2E;
+        gap: 8px; background-color: #1C1C1E;
+        padding: 6px; border-radius: 14px; border: 1px solid #2C2C2E;
     }
     .stTabs [data-baseweb="tab"] {
-        border-radius: 10px;
-        padding: 10px 20px;
-        border: none !important;
-        color: #8E8E93 !important; /* Gray text untuk unselected */
-        font-weight: 500;
+        border-radius: 10px; padding: 10px 20px;
+        border: none !important; color: #8E8E93 !important; font-weight: 500;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #2C2C2E !important; /* Highlight tab aktif */
-        color: #FFFFFF !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        background-color: #2C2C2E !important;
+        color: #FFFFFF !important; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
     }
-    
-    /* Tombol Utama iOS Blue */
     .stButton>button {
-        border-radius: 14px !important;
-        font-weight: 600 !important;
-        padding: 0.6rem 2rem !important;
-        border: none !important;
-        background-color: #0A84FF !important; /* iOS Dark Blue */
-        color: white !important;
-        transition: all 0.2s ease;
-        box-shadow: 0 4px 12px rgba(10, 132, 255, 0.3);
+        border-radius: 14px !important; font-weight: 600 !important;
+        padding: 0.6rem 2rem !important; border: none !important;
+        background-color: #0A84FF !important; color: white !important;
+        transition: all 0.2s ease; box-shadow: 0 4px 12px rgba(10,132,255,0.3);
     }
-    .stButton>button:hover {
-        background-color: #0066CC !important;
-        transform: scale(0.99);
-    }
-    
-    /* Dropdown & Input Form styling */
+    .stButton>button:hover { background-color: #0066CC !important; transform: scale(0.99); }
     div[data-baseweb="select"] > div {
-        background-color: #1C1C1E !important;
-        border: 1px solid #2C2C2E !important;
-        border-radius: 12px !important;
-        color: #FFFFFF !important;
+        background-color: #1C1C1E !important; border: 1px solid #2C2C2E !important;
+        border-radius: 12px !important; color: #FFFFFF !important;
     }
-    div[data-testid="stMarkdownContainer"] p {
-        color: #E5E5EA !important;
-    }
-    
-    /* Expander Container (Simulasi Section) */
+    div[data-testid="stMarkdownContainer"] p { color: #E5E5EA !important; }
     [data-testid="stExpander"] {
-        background-color: #1C1C1E !important;
-        border-radius: 16px !important;
-        border: 1px solid #2C2C2E !important;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        background-color: #1C1C1E !important; border-radius: 16px !important;
+        border: 1px solid #2C2C2E !important; box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }
-    
-    /* Slider styling customization */
-    .stSlider [data-testid="stTickBar"] {
-        color: #8E8E93;
-    }
-
-    /* Hilangkan footer bawaan */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    .stSlider [data-testid="stTickBar"] { color: #8E8E93; }
+    #MainMenu { visibility: hidden; }
+    footer { visibility: hidden; }
     </style>
 """, unsafe_allow_html=True)
 
+# === KONSTANTA & DATA MODEL ===
+CLASS_LABELS = {0: "Distress (Stres Negatif)", 1: "Eustress (Stres Positif)", 2: "Other / Mixed Stress"}
+CLASS_COLORS = {0: "#FF453A", 1: "#30D158", 2: "#FFD60A"}
 
-# INISIALISASI SESSION STATE
+CLASS_DESC = {
+    0: "Kondisimu menunjukkan tanda-tanda **distress** — stres yang berdampak negatif pada kesehatan dan performa. Perlu perhatian serius.",
+    1: "Kondisimu tergolong **eustress** — tekanan yang masih produktif dan mendorong pertumbuhan. Pertahankan keseimbangan ini.",
+    2: "Kondisimu berada di zona **campuran** — ada kombinasi tekanan positif dan negatif. Perhatikan faktor-faktor pemicu di bawah.",
+}
 
-if 'is_analyzed' not in st.session_state:
-    st.session_state.is_analyzed = False
-if 'user_input' not in st.session_state:
-    st.session_state.user_input = {}
+# Label & arah fitur untuk slider simulasi (True = fitur positif, higher = better)
+FEATURE_META = {
+    "stress_experience": ("Pengalaman Stres Berat", False),
+    "heartbeat_palpitations": ("Jantung Berdebar Kencang", False),
+    "anxiety_tension": ("Kecemasan / Ketegangan", False),
+    "sleep_problems": ("Kualitas Tidur", False),
+    "restlessness": ("Kegelisahan", False),
+    "irritability": ("Emosional / Mudah Marah", False),
+    "sadness_low_mood": ("Perasaan Sedih / Bad Mood", False),
+    "loneliness_isolation": ("Kesepian / Isolasi Sosial", False),
+    "concentration_problems": ("Kesulitan Konsentrasi", False),
+    "headaches": ("Frekuensi Sakit Kepala", False),
+    "health_issues": ("Keluhan Fisik", False),
+    "weight_changes": ("Perubahan Berat Badan", False),
+    "academic_overload": ("Beban Tugas Kuliah", False),
+    "peer_competition": ("Kompetisi Antar Teman", False),
+    "low_academic_confidence": ("Kurang Percaya Diri Akademik", False),
+    "subject_confidence": ("Penguasaan Materi Kuliah", True),
+    "academic_conflicts": ("Konflik Akademik", False),
+    "class_attendance": ("Kehadiran Kelas", True),
+    "professor_difficulties": ("Hambatan dengan Dosen", False),
+    "work_environment": ("Kondisi Lingkungan Kelompok", False),
+    "home_environment": ("Kenyamanan Tempat Tinggal", True),
+    "relationship_stress": ("Stres Hubungan", False),
+    "lack_relaxation_time": ("Kurang Waktu Relaksasi", False),
+}
 
+KATEGORI_FEATURES = {
+    "Demographics": ["gender", "age"],
+    "Emotional & Stress Indicators": ["stress_experience", "heartbeat_palpitations", "anxiety_tension", "sleep_problems", "restlessness", "irritability", "sadness_low_mood", "loneliness_isolation", "concentration_problems"],
+    "Physical & Health Indicators": ["headaches", "health_issues", "weight_changes"],
+    "Academic & Environment Stressors": ["academic_overload", "peer_competition", "low_academic_confidence", "subject_confidence", "academic_conflicts", "class_attendance", "professor_difficulties", "work_environment", "home_environment"],
+    "Social & Relationship Factors": ["relationship_stress", "lack_relaxation_time"],
+}
 
-# INPUT MODEL & SCALER
-
+# === LOAD MODEL ===
 @st.cache_resource
 def load_ml_components():
-    model_path = 'model/voting_model.pkl' if os.path.exists('model/voting_model.pkl') else 'voting_model.pkl'
-    scaler_path = 'model/scaler.pkl' if os.path.exists('model/scaler.pkl') else 'scaler.pkl'
-    return joblib.load(model_path), joblib.load(scaler_path)
+    def resolve(name):
+        return f"model/{name}" if os.path.exists(f"model/{name}") else name
+    return (
+        joblib.load(resolve("voting_model.pkl")),
+        joblib.load(resolve("scaler.pkl")),
+        joblib.load(resolve("feature_names.pkl")),
+    )
+
+@st.cache_resource
+def get_top_features(_model, _features, n=5, exclude=("gender", "age")):
+    """Top-N fitur berdasarkan importance RF dalam VotingClassifier."""
+    imp = pd.Series(_model.estimators_[0].feature_importances_, index=_features)
+    return imp.drop(list(exclude), errors="ignore").nlargest(n).index.tolist()
 
 try:
-    model, scaler = load_ml_components()
+    model, scaler, FEATURES = load_ml_components()
 except Exception as e:
     st.error(f"Gagal memuat komponen ML. Error: {e}")
     st.stop()
 
-FEATURES = [
-    "gender", "age", "stress_experience", "heartbeat_palpitations", "anxiety_tension",
-    "sleep_problems", "restlessness", "headaches", "irritability", "concentration_problems",
-    "sadness_low_mood", "health_issues", "loneliness_isolation", "academic_overload", 
-    "peer_competition", "relationship_stress", "professor_difficulties", "work_environment", 
-    "lack_relaxation_time", "home_environment", "low_academic_confidence", "subject_confidence", 
-    "academic_conflicts", "class_attendance", "weight_changes"
-]
+# === SESSION STATE ===
+if "is_analyzed" not in st.session_state:
+    st.session_state.is_analyzed = False
+if "user_input" not in st.session_state:
+    st.session_state.user_input = {}
 
+# === HEADER ===
+st.markdown("<h1 style='text-align:center; font-weight:700; letter-spacing:-0.5px; margin-bottom:5px;'>CampusCALM</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center; color:#8E8E93; margin-bottom:2rem;'>Smart Predictions, Better Mental Health.</p>", unsafe_allow_html=True)
+st.info("**Panduan Pengisian Skala (1-5):** Nilai 1 mendeskripsikan kondisi paling minim / jarang terjadi, sedangkan nilai 5 mendeskripsikan kondisi paling maksimal / konstan.")
 
-# LAYOUT UTAMA & TABS INPUT
+# === FORM INPUT ===
+tabs = st.tabs(["Demographics", "Emotional & Stress Indicators", "Physical & Health Indicators", "Academic & Environment Stressors", "Social & Relationship Factors"])
+ui = {}
 
-# Title
-st.markdown("<h1 style='text-align: center; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 5px;'>🧠 CampusCALM</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #8E8E93; margin-bottom: 2rem;'>Smart Predictions, Better Mental Health.</p>", unsafe_allow_html=True)
-
-st.info("**💡 Panduan Pengisian Skala (1-5):** Nilai 1 mendeskripsikan kondisi paling minim / jarang terjadi, sedangkan nilai 5 mendeskripsikan kondisi paling maksimal / konstan.")
-
-tabs = st.tabs(["👥 Demografi", "🧘‍♂️ Psikologis", "📚 Akademik", "🌍 Lingkungan & Sosial"])
-user_input = {}
-options = [1, 2, 3, 4, 5]
-
-# TAB 1: DEMOGRAFI
 with tabs[0]:
-    user_input["gender"] = st.selectbox("Gender (0: Laki-laki, 1: Perempuan)", [0, 1])
-    user_input["age"] = st.number_input("Umur saat ini (Tahun)", min_value=15, max_value=40, value=20)
-    user_input["stress_experience"] = st.selectbox("Pernah Mengalami Stres Berat Sebelumnya?", options)
+    ui["gender"] = st.selectbox("Gender", [0, 1], format_func=lambda x: "Laki-laki" if x == 0 else "Perempuan")
+    ui["age"]    = st.number_input("Umur saat ini (Tahun)", min_value=18, max_value=22, value=20)
 
-# TAB 2: PSIKOLOGIS
 with tabs[1]:
-    col1, col2 = st.columns(2)
-    with col1:
-        user_input["heartbeat_palpitations"] = st.selectbox("Jantung Sering Berdebar Kencang", options)
-        user_input["anxiety_tension"] = st.selectbox("Tingkat Kecemasan / Ketegangan Pikiran", options)
-        user_input["sleep_problems"] = st.selectbox("Masalah Pola Tidur / Insomnia", options)
-        user_input["restlessness"] = st.selectbox("Merasa Gelisah Berlebihan", options)
-    with col2:
-        user_input["headaches"] = st.selectbox("Frekuensi Mengalami Sakit Kepala", options)
-        user_input["irritability"] = st.selectbox("Tingkat Emosional / Gampang Marah", options)
-        user_input["concentration_problems"] = st.selectbox("Kesulitan Fokus & Konsentrasi Belajar", options)
-        user_input["sadness_low_mood"] = st.selectbox("Sering Merasa Sedih / Bad Mood", options)
-        user_input["health_issues"] = st.selectbox("Keluhan Sakit Fisik Lainnya", options)
-        user_input["weight_changes"] = st.selectbox("Perubahan Berat Badan Secara Drastis", options)
+    c1, c2 = st.columns(2)
+    with c1:
+        ui["stress_experience"] = st.slider("Pernah Mengalami Stres Berat Sebelumnya?", 1, 5, 3)
+        ui["heartbeat_palpitations"] = st.slider("Jantung Sering Berdebar Kencang", 1, 5, 3)
+        ui["anxiety_tension"] = st.slider("Tingkat Kecemasan / Ketegangan Pikiran", 1, 5, 3)
+        ui["sleep_problems"] = st.slider("Masalah Pola Tidur / Insomnia", 1, 5, 3)
+        ui["restlessness"]           = st.slider("Merasa Gelisah Berlebihan", 1, 5, 3)
+    with c2:
+        ui["irritability"] = st.slider("Tingkat Emosional / Gampang Marah", 1, 5, 3)
+        ui["sadness_low_mood"] = st.slider("Sering Merasa Sedih / Bad Mood", 1, 5, 3)
+        ui["loneliness_isolation"] = st.slider("Merasa Kesepian atau Terisolasi", 1, 5, 3)
+        ui["concentration_problems"] = st.slider("Kesulitan Fokus & Konsentrasi Belajar", 1, 5, 3)
 
-# TAB 3: AKADEMIK
 with tabs[2]:
-    col1, col2 = st.columns(2)
-    with col1:
-        user_input["academic_overload"] = st.selectbox("Tekanan & Volume Tugas Kuliah", options)
-        user_input["low_academic_confidence"] = st.selectbox("Rasa Kurang Percaya Diri terhadap Nilai", options)
-        user_input["subject_confidence"] = st.selectbox("Tingkat Penguasaan Materi Kuliah", options)
-    with col2:
-        user_input["academic_conflicts"] = st.selectbox("Konflik Akademik (Dosen / Universitas)", options)
-        user_input["class_attendance"] = st.selectbox("Tingkat Kehadiran Presensi Kelas", options)
-        user_input["professor_difficulties"] = st.selectbox("Hambatan Komunikasi dengan Dosen", options)
+    ui["headaches"] = st.slider("Frekuensi Mengalami Sakit Kepala", 1, 5, 3)
+    ui["health_issues"] = st.slider("Keluhan Sakit Fisik Lainnya", 1, 5, 3)
+    ui["weight_changes"] = st.slider("Perubahan Berat Badan Secara Drastis", 1, 5, 3)
 
-# TAB 4: LINGKUNGAN & SOSIAL 
 with tabs[3]:
-    col1, col2 = st.columns(2)
-    with col1:
-        user_input["loneliness_isolation"] = st.selectbox("Merasa Kesepian atau Terisolasi", options)
-        user_input["peer_competition"] = st.selectbox("Tekanan Kompetisi Antar Teman Sekelas", options)
-        user_input["relationship_stress"] = st.selectbox("Stres Hubungan (Asmara / Keluarga)", options)
-    with col2:
-        user_input["work_environment"] = st.selectbox("Kondisi Lingkungan Kerja / Tugas Kelompok", options)
-        user_input["home_environment"] = st.selectbox("Kenyamanan Lingkungan Tempat Tinggal/Kos", options)
-        user_input["lack_relaxation_time"] = st.selectbox("Kurangnya Waktu untuk Liburan/Relaksasi", options)
+    c1, c2 = st.columns(2)
+    with c1:
+        ui["academic_overload"] = st.slider("Tekanan & Volume Tugas Kuliah", 1, 5, 3)
+        ui["peer_competition"] = st.slider("Tekanan Kompetisi Antar Teman Sekelas", 1, 5, 3)
+        ui["low_academic_confidence"] = st.slider("Rasa Kurang Percaya Diri terhadap Nilai", 1, 5, 3)
+        ui["subject_confidence"] = st.slider("Tingkat Penguasaan Materi Kuliah", 1, 5, 3)
+    with c2:
+        ui["academic_conflicts"] = st.slider("Konflik Akademik (Dosen / Universitas)", 1, 5, 3)
+        ui["class_attendance"] = st.slider("Tingkat Kehadiran Presensi Kelas", 1, 5, 3)
+        ui["professor_difficulties"] = st.slider("Hambatan Komunikasi dengan Dosen", 1, 5, 3)
+        ui["work_environment"] = st.slider("Kondisi Lingkungan Kerja / Tugas Kelompok", 1, 5, 3)
+        ui["home_environment"] = st.slider("Kenyamanan Lingkungan Tempat Tinggal/Kos", 1, 5, 3)
+
+with tabs[4]:
+    ui["relationship_stress"] = st.slider("Stres Hubungan (Asmara / Keluarga)", 1, 5, 3)
+    ui["lack_relaxation_time"] = st.slider("Kurangnya Waktu untuk Liburan/Relaksasi", 1, 5, 3)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    
-    # Menyimpan input ke session state 
-    st.session_state.user_input = user_input.copy()
-    
-    # Tombol lihat analisis
+    st.session_state.user_input = ui.copy()
+
     if st.button("Tampilkan Hasil Analisis", type="primary", use_container_width=True):
         st.session_state.is_analyzed = True
 
-    # SELURUH BLOK HASIL DIKUNCI DI SINI 
+# === HASIL ANALISIS ===
     if st.session_state.is_analyzed:
-        st.markdown("<br><hr style='border-color: #2C2C2E;'>", unsafe_allow_html=True)
-        
-        # Hitung Prediksi
-        input_df = pd.DataFrame([st.session_state.user_input])[FEATURES]
-        input_scaled = scaler.transform(input_df)
-        prediction = model.predict(input_scaled)[0]
-        
-        status = "Distress (Stres Tinggi)" if prediction == 0 else "Normal (Terkendali)"
-        color = "#FF453A" if prediction == 0 else "#30D158" # iOS Neon Red / Neon Green
-        
-        st.markdown(f"<h2 style='text-align: center; color: {color} !important;'>Status: {status}</h2>", unsafe_allow_html=True)
-        
-        # Rekomendasi solusi
+        ui = st.session_state.user_input
+        st.markdown("<br><hr style='border-color:#2C2C2E;'>", unsafe_allow_html=True)
+
+        input_scaled = scaler.transform(pd.DataFrame([ui])[FEATURES])
+        prediction   = model.predict(input_scaled)[0]
+
+        st.markdown(
+            f"<h2 style='text-align:center; color:{CLASS_COLORS[prediction]} !important;'>"
+            f"Status: {CLASS_LABELS[prediction]}</h2>",
+            unsafe_allow_html=True
+        )
+        st.markdown(f"> {CLASS_DESC[prediction]}")
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        # Rekomendasi berdasarkan nilai input user
         recommendations = []
-        if st.session_state.user_input["academic_overload"] >= 4 and st.session_state.user_input["sleep_problems"] >= 4:
+        if ui["academic_overload"] >= 4 and ui["sleep_problems"] >= 4:
             recommendations.append("Beban belajar dan gangguan tidurmu berada di zona merah. Terapkan batasan tegas kapan harus berhenti belajar demi menjaga tubuh.")
-        if st.session_state.user_input["loneliness_isolation"] >= 4:
+        if ui["loneliness_isolation"] >= 4:
             recommendations.append("Interaksi sosialmu minim. Sempatkan menyapa teman lama atau ikut berdiskusi langsung di sekretariat/lingkungan kampus.")
-        if st.session_state.user_input["lack_relaxation_time"] >= 4:
+        if ui["lack_relaxation_time"] >= 4:
             recommendations.append("Tubuhmu butuh rehat. Jadwalkan waktu kosong minimal 45 menit tanpa melihat notifikasi tugas sama sekali.")
+        if ui["anxiety_tension"] >= 4 or ui["restlessness"] >= 4:
+            recommendations.append("Tingkat kecemasan dan kegelisahanmu cukup tinggi. Teknik pernapasan dalam atau journaling singkat sebelum tidur bisa membantu meredakannya.")
         if not recommendations:
             recommendations.append("Kombinasi pola hidup dan aktivitas akademikmu sudah berada pada jalur yang sehat. Pertahankan keseimbangan ini!")
 
-        st.markdown("#### 💡 Actionable Insights")
+        st.markdown("#### Actionable Insights")
         for rec in recommendations:
             st.markdown(f"- {rec}")
-            
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Visualisasi Diagram  
-        col_chart1, col_chart2 = st.columns(2)
-        
-        with col_chart1:
-            st.markdown("**📊 Faktor Pemicu Tertinggi**")
-            filtered_metrics = {k: v for k, v in st.session_state.user_input.items() if k not in ["gender", "age"]}
-            top_factors = sorted(filtered_metrics.items(), key=lambda x: x[1], reverse=True)[:3]
-            
-            # Setup Bar Chart  
-            fig, ax = plt.subplots(figsize=(6, 3.2))
-            fig.patch.set_facecolor('#1C1C1E')
-            ax.set_facecolor('#1C1C1E')
-            
-            bars = ax.barh([x[0].replace("_", " ").title() for x in top_factors], 
-                    [x[1] for x in top_factors], color='#0A84FF', height=0.55)
-            
+        # Visualisasi
+        col1, col2 = st.columns(2)
+
+        with col1:
+            st.markdown("**Faktor Pemicu Tertinggi**")
+            top5 = sorted(
+                {k: v for k, v in ui.items() if k not in ["gender", "age"]}.items(),
+                key=lambda x: x[1], reverse=True
+            )[:5]
+            fig, ax = plt.subplots(figsize=(6, 4.5))
+            fig.patch.set_facecolor("#1C1C1E")
+            ax.set_facecolor("#1C1C1E")
+            ax.barh([x[0].replace("_", " ").title() for x in top5], [x[1] for x in top5],
+                    color="#0A84FF", height=0.55)
             ax.set_xlim(0, 5)
             ax.invert_yaxis()
-            ax.tick_params(colors='#FFFFFF', labelsize=9)
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['left'].set_visible(False)
-            ax.spines['bottom'].set_color('#2C2C2E')
-            ax.grid(axis='x', color='#2C2C2E', linestyle='--', alpha=0.7)
+            ax.tick_params(colors="#FFFFFF", labelsize=9)
+            for spine in ["top", "right", "left"]:
+                ax.spines[spine].set_visible(False)
+            ax.spines["bottom"].set_color("#2C2C2E")
+            ax.grid(axis="x", color="#2C2C2E", linestyle="--", alpha=0.7)
             st.pyplot(fig)
 
-        with col_chart2:
-            st.markdown("**🕸️ Radar Keseimbangan Mental**")
-            radar_features = ["sleep_problems", "academic_overload", "anxiety_tension", "peer_competition", "relationship_stress"]
-            user_vals = [st.session_state.user_input[f] for f in radar_features]
-            avg_vals = [3.1, 3.4, 2.9, 3.0, 2.6] # Representasi baseline rata-rata
-            
+        with col2:
+            st.markdown("**Radar Keseimbangan Mental**")
+            radar_features = ["sleep_problems", "academic_overload", "anxiety_tension",
+                               "peer_competition", "relationship_stress"]
             fig_radar = go.Figure()
-            fig_radar.add_trace(go.Scatterpolar(r=user_vals, theta=[f.replace("_", " ").title() for f in radar_features], fill='toself', name='Skormu', line_color='#0A84FF'))
-            fig_radar.add_trace(go.Scatterpolar(r=avg_vals, theta=[f.replace("_", " ").title() for f in radar_features], fill='toself', name='Rata-rata', line_color='rgba(142, 142, 147, 0.4)'))
-            
+            fig_radar.add_trace(go.Scatterpolar(
+                r=[ui[f] for f in radar_features],
+                theta=[f.replace("_", " ").title() for f in radar_features],
+                fill="toself", name="Skormu", line_color="#0A84FF"
+            ))
+            fig_radar.add_trace(go.Scatterpolar(
+                r=[3.1, 3.4, 2.9, 3.0, 2.6],
+                theta=[f.replace("_", " ").title() for f in radar_features],
+                fill="toself", name="Rata-rata", line_color="rgba(142,142,147,0.4)"
+            ))
             fig_radar.update_layout(
                 polar=dict(
-                    radialaxis=dict(visible=True, range=[0, 5], gridcolor='#2C2C2E', tickfont=dict(color='#8E8E93')),
-                    angularaxis=dict(gridcolor='#2C2C2E', tickfont=dict(color='#FFFFFF', size=10)),
-                    bgcolor='rgba(0,0,0,0)'
+                    radialaxis=dict(visible=True, range=[0, 5], gridcolor="#2C2C2E",
+                                    tickfont=dict(color="#8E8E93")),
+                    angularaxis=dict(gridcolor="#2C2C2E", tickfont=dict(color="#FFFFFF", size=10)),
+                    bgcolor="rgba(0,0,0,0)"
                 ),
-                showlegend=True,
-                legend=dict(font=dict(color='#FFFFFF')),
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
+                showlegend=True, legend=dict(font=dict(color="#FFFFFF")),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
                 margin=dict(l=40, r=40, t=25, b=25)
             )
             st.plotly_chart(fig_radar, use_container_width=True)
 
-        # SIMULASI WHAT-IF
+        # Simulasi: slider arah berlawanan dengan skala form karena merepresentasikan tingkat perbaikan
         st.markdown("<br>", unsafe_allow_html=True)
-        with st.expander("🔄 Simulasi Modifikasi Kebiasaan (Live Preview)", expanded=True):
-            st.markdown("<p style='color: #8E8E93; font-size: 0.9em; margin-bottom: 1.5rem;'>Geser slider di bawah ini untuk melihat simulasi perbaikan gaya hidupmu secara instan.</p>", unsafe_allow_html=True)
-            
-            sim_sleep_quality = st.slider("Kualitas Tidur (1 = Insomnia Parah, 5 = Sangat Nyenyak)", 1, 5, 3)
-            sim_load_management = st.slider("Manajemen Beban Tugas (1 = Keteteran, 5 = Terkendali Baik)", 1, 5, 3)
-            
-            simulated_data = st.session_state.user_input.copy()
-            
-            # Semakin besar slider (makin bagus), angka masalah di dataset asli semakin kecil (6 - input)
-            simulated_data["sleep_problems"] = 6 - sim_sleep_quality
-            simulated_data["academic_overload"] = 6 - sim_load_management
-            
-            sim_df = pd.DataFrame([simulated_data])[FEATURES]
-            sim_scaled = scaler.transform(sim_df)
-            sim_pred = model.predict(sim_scaled)[0]
-            
-            sim_status = "Distress (Stres Tinggi)" if sim_pred == 0 else "Normal (Aman & Terkendali)"
-            sim_color = "#FF453A" if sim_pred == 0 else "#30D158"
-            
-            st.markdown(f"<h4 style='text-align: center; margin-top: 1rem;'>Prediksi Simulasi: <span style='color:{sim_color}; font-weight:700;'>{sim_status}</span></h4>", unsafe_allow_html=True)
-            
+        with st.expander("Simulasi Modifikasi Kebiasaan (Live Preview)", expanded=True):
+            st.markdown(
+                "<p style='color:#8E8E93; font-size:0.9em; margin-bottom:1.5rem;'>"
+                "Geser slider di bawah ini untuk melihat simulasi perbaikan gaya hidupmu secara instan.</p>",
+                unsafe_allow_html=True
+            )
+            sim_data = ui.copy()
+            for feat in get_top_features(model, FEATURES):
+                label, is_positive = FEATURE_META.get(feat, (feat.replace("_", " ").title(), False))
+                if is_positive:
+                    slider_label = f"Tingkatkan: {label} (1 = Sangat Rendah, 5 = Sangat Tinggi)"
+                else:
+                    slider_label = f"Perbaiki: {label} (1 = Masih Parah, 5 = Sudah Membaik)"
+                val = st.slider(slider_label, 1, 5, 3, key=f"sim_{feat}")
+                sim_data[feat] = val if is_positive else (6 - val)
+
+            sim_pred = model.predict(scaler.transform(pd.DataFrame([sim_data])[FEATURES]))[0]
+            st.markdown(
+                f"<h4 style='text-align:center; margin-top:1rem;'>Prediksi Simulasi: "
+                f"<span style='color:{CLASS_COLORS[sim_pred]}; font-weight:700;'>"
+                f"{CLASS_LABELS[sim_pred]}</span></h4>",
+                unsafe_allow_html=True
+            )
             if sim_pred == 1:
-                st.success("✨ Hasil Bagus! Skenario perbaikan gaya hidup ini terbukti efektif menurunkan tingkat risiko stres menurut kalkulasi algoritma.")
+                st.success("Hasil Bagus! Skenario perbaikan gaya hidup ini terbukti efektif menurunkan tingkat risiko stres menurut kalkulasi algoritma.")
+            elif sim_pred == 2:
+                st.info("Kondisi sudah bergerak ke arah lebih seimbang. Konsistensi perubahan kebiasaan ini akan mendorong hasil yang lebih stabil.")
             else:
-                st.warning("⚠️ Perubahan opsi ini dirasa belum cukup dominan. Cobalah naikkan kualitas tidur atau kombinasikan dengan penyeimbang manajemen waktu lainnya.")
+                st.warning("Perubahan ini dirasa belum cukup dominan. Cobalah naikkan kualitas tidur atau kombinasikan dengan penyeimbang manajemen waktu lainnya.")
+
+        # Download laporan
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<hr style='border-color:#2C2C2E;'>", unsafe_allow_html=True)
+
+        def build_report(ui, prediction, recommendations, top5):
+            sep  = "=" * 52
+            now  = datetime.now().strftime("%d %B %Y, %H:%M")
+            top5_lines = "\n".join(
+                f"  {i+1}. {k.replace('_',' ').title():<30}: {v}/5"
+                for i, (k, v) in enumerate(top5)
+            )
+            detail_lines = []
+            for kat, feats in KATEGORI_FEATURES.items():
+                detail_lines.append(f"\n  [{kat}]")
+                for f in feats:
+                    label  = FEATURE_META.get(f, (f.replace("_", " ").title(), False))[0]
+                    suffix = "/5" if f not in ["gender", "age"] else ""
+                    detail_lines.append(f"\n  {label:<35}: {ui.get(f, '-')}{suffix}")
+            rec_lines = "\n".join(f"  - {r}" for r in recommendations)
+            return f"""{sep}
+          LAPORAN ANALISIS STRES AKADEMIK
+                  CampusCALM
+{sep}
+  Tanggal Analisis : {now}
+{sep}
+
+  HASIL PREDIKSI
+  Status           : {CLASS_LABELS[prediction]}
+
+  {CLASS_DESC[prediction].replace('**', '')}
+
+{sep}
+
+  TOP 5 FAKTOR PEMICU TERTINGGI
+{top5_lines}
+
+{sep}
+
+  ACTIONABLE INSIGHTS
+{rec_lines}
+
+{sep}
+
+  DETAIL DATA INPUT
+{"".join(detail_lines)}
+
+{sep}
+  Laporan ini dihasilkan secara otomatis oleh CampusCALM.
+  Bukan pengganti diagnosis profesional kesehatan mental.
+{sep}""".strip()
+
+        report_text = build_report(ui, prediction, recommendations, top5)
+        st.download_button(
+            label="Unduh Laporan Analisis (.txt)",
+            data=report_text.encode("utf-8"),
+            file_name=f"CampusCALM_Laporan_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+            mime="text/plain",
+            use_container_width=True
+        )
