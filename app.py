@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # === KONFIGURASI HALAMAN ===
-st.set_page_config(page_title="CampusCALM", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="CampusCalm", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
     <style>
@@ -66,7 +66,7 @@ CLASS_DESC = {
     2: "Kondisimu berada di zona **campuran** — ada kombinasi tekanan positif dan negatif. Perhatikan faktor-faktor pemicu di bawah.",
 }
 
-# Label & arah fitur untuk slider simulasi (True = fitur positif, higher = better)
+# Label & arah fitur untuk slider simulasi. Penjelasan: True = fitur positif, higher = better
 FEATURE_META = {
     "stress_experience": ("Pengalaman Stres Berat", False),
     "heartbeat_palpitations": ("Jantung Berdebar Kencang", False),
@@ -131,7 +131,7 @@ if "user_input" not in st.session_state:
     st.session_state.user_input = {}
 
 # === HEADER ===
-st.markdown("<h1 style='text-align:center; font-weight:700; letter-spacing:-0.5px; margin-bottom:5px;'>CampusCALM</h1>", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center; font-weight:700; letter-spacing:-0.5px; margin-bottom:5px;'>CampusCalm</h1>", unsafe_allow_html=True)
 st.markdown("<p style='text-align:center; color:#8E8E93; margin-bottom:2rem;'>Smart Predictions, Better Mental Health.</p>", unsafe_allow_html=True)
 st.info("**Panduan Pengisian Skala (1-5):** Nilai 1 mendeskripsikan kondisi paling minim / jarang terjadi, sedangkan nilai 5 mendeskripsikan kondisi paling maksimal / konstan.")
 
@@ -202,7 +202,7 @@ with tabs[4]:
         st.markdown(f"> {CLASS_DESC[prediction]}")
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Rekomendasi berdasarkan nilai input user
+        # Rekomendasi
         recommendations = []
         if ui["academic_overload"] >= 4 and ui["sleep_problems"] >= 4:
             recommendations.append("Beban belajar dan gangguan tidurmu berada di zona merah. Terapkan batasan tegas kapan harus berhenti belajar demi menjaga tubuh.")
@@ -324,7 +324,7 @@ with tabs[4]:
             rec_lines = "\n".join(f"  - {r}" for r in recommendations)
             return f"""{sep}
           LAPORAN ANALISIS STRES AKADEMIK
-                  CampusCALM
+                  CampusCalm
 {sep}
   Tanggal Analisis : {now}
 {sep}
@@ -350,7 +350,7 @@ with tabs[4]:
 {"".join(detail_lines)}
 
 {sep}
-  Laporan ini dihasilkan secara otomatis oleh CampusCALM.
+  Laporan ini dihasilkan secara otomatis oleh CampusCalm.
   Bukan pengganti diagnosis profesional kesehatan mental.
 {sep}""".strip()
 
@@ -358,7 +358,7 @@ with tabs[4]:
         st.download_button(
             label="Unduh Laporan Analisis (.txt)",
             data=report_text.encode("utf-8"),
-            file_name=f"CampusCALM_Laporan_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
+            file_name=f"CampusCalm_Laporan_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
             mime="text/plain",
             use_container_width=True
         )
