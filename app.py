@@ -114,8 +114,8 @@ def load_ml_components():
 
 @st.cache_resource
 def get_top_features(_model, _features, n=5, exclude=("gender", "age")):
-    """Top-N fitur berdasarkan importance RF dalam VotingClassifier."""
-    imp = pd.Series(_model.estimators_[0].feature_importances_, index=_features)
+    rf_estimator = _model.named_estimators_['rf']
+    imp = pd.Series(rf_estimator.feature_importances_, index=_features)
     return imp.drop(list(exclude), errors="ignore").nlargest(n).index.tolist()
 
 try:
