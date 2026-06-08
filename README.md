@@ -27,6 +27,8 @@ Folder ini adalah tempat untuk menyimpan model machine learning yang sudah seles
 ---
 
 > ## **Cara Menjalankan**
+Berikut merupakan link demo deplyoment aplikasi "CampusCalm" kami: https://campuscalm.streamlit.app/
+atau kamu juga bisa menjalankannya secara local:
 ### 1. Install Dependencies
 Pastikan Python 3.8+ terinstal, lalu jalankan:
 ```bash
